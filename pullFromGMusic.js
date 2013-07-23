@@ -6,11 +6,10 @@ songs = document.getElementsByClassName("song-row")
 buffer = ""
 for (i=0;i<songs.length;i++) {
         song = songs[i];
-            console.debug(song);
-                title = song.querySelector('[data-col="title"]').textContent;
-                    album = song.querySelector('[data-col="album"]').textContent;
-                        artist = song.querySelector('[data-col="artist"]').textContent;
-                            buffer += artist + "|" + title + "|" + album + "\n";
+        title = song.querySelector('[data-col="title"]').textContent;
+        album = song.querySelector('[data-col="album"]').textContent;
+        artist = song.querySelector('[data-col="artist"]').textContent;
+        buffer += artist + "|" + title + "|" + album + "\n";
 }
 console.debug(buffer)
 

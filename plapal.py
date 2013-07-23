@@ -1,7 +1,7 @@
 # -*- coding: utf_8 -*-
 import os
 import socket
-import id3reader
+from mutagen.id3 import ID3
 
 import sqlite3
 import hashlib
@@ -24,22 +24,43 @@ def listDirectory(directory, fileExtList):
     return fileList
 
 def getData(path, stripPath=""):
-    id3 = id3reader.Reader(f)
+    id3 = ID3(path)
     strip = len(stripPath)
-    return {"title": id3.getValue("title"),
-            "artist": id3.getValue("performer"),
-            "album": id3.getValue("album"),
-            "genre": id3.getValue("genre"),
-            "hash": genHash(path),
-            "path": f[strip:]}
-
-
-def genHash(path):
+    data = {"path": f[strip:]}
+    if "TIT2" in id3:
+        data["title"] = id3["TIT2"].text[0]
+    else:
+        data["title"] = "UNKNOWN"
+    if "TPE1" in id3:
+        data["artist"] = id3["TPE1"].text[0]
+    else:
+        data["artist"] = "UNKNOWN"
+    if "TALB" in id3:
+        data["album"] = id3["TALB"].text[0]
+    else:
+        data["album"] = "UNKNOWN"
+    data["hash"] = genHash(path, id3.size)
+    return data
+    
+def genHash(path, header_size):
     sha = hashlib.sha256()
     source = open(path, 'rb')
+    head = source.read(3)
+    if head == "ID3":
+        source.seek(header_size)
+    else:
+        source.seek(0)
+    # Skip null padding
+    buf = source.read(1)
+    while buf != "\xFF":
+        buf = source.read(1)
+    source.seek(-1, 1)
     for i in xrange(0,10):
         try:
             buf = source.read(10240)
+            if (i==0 and buf[0] != "\xFF"):
+                import pdb; pdb.set_trace()
+                print "Uh-oh!"
             sha.update(buf)
         except:
             break
@@ -47,18 +68,23 @@ def genHash(path):
     return sha.hexdigest()
 
 def storeData(cur, data, host):
-    cur.execute("insert into description "
-                         "(id, artist, title, album, genre) "
-                         "values (?,?,?,?,?)",(
+    try:
+        cur.execute("insert into description "
+                         "(id, artist, title, album) "
+                         "values (?,?,?,?)",(
                          data["hash"],
                          data["artist"],
                          data["title"],
-                         data["album"],
-                         data["genre"]))
-    cur.execute("insert into files (id, path, host) values (?,?,?)",[
+                         data["album"]))
+        cur.execute("insert into files (id, path, host) values (?,?,?)",[
                       data["hash"],
                       data["path"].decode('utf8'),
                       host])
+    except sqlite3.IntegrityError:
+        pass
+    except Exception, e:
+        import pdb; pdb.set_trace()
+        print e
 
 def findMatch(cur, data):
     cur.execute("select * from files where id = ?", [data["hash"]])
@@ -83,8 +109,8 @@ if __name__ == "__main__":
     files = listDirectory(options.directory, [".mp3"])
     print "Storing music..."
     for f in files:
-        data = getData(f, options.directory)
         try:
+            data = getData(f, options.directory)
             storeData(cur, data, options.host)
         except Exception,e:
             db.commit()
@@ -92,7 +118,6 @@ if __name__ == "__main__":
             pprint(data)
             print "\t\t%s" % e
             pprint(findMatch(cur, data))
-            import pdb;pdb.set_trace()
             #storeError(cur, data, e)
         # pprint(data)
     db.commit()
