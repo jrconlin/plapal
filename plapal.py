@@ -1,6 +1,7 @@
 # -*- coding: utf_8 -*-
 import os
 import socket
+import sys
 from mutagen.id3 import ID3
 
 import sqlite3
@@ -67,7 +68,8 @@ def genHash(path, header_size):
     source.close()
     return sha.hexdigest()
 
-def storeData(cur, data, host):
+def storeData(cur, data, options):
+    host = options.host
     try:
         cur.execute("insert into description "
                          "(id, artist, title, album) "
@@ -80,7 +82,11 @@ def storeData(cur, data, host):
                       data["hash"],
                       data["path"].decode('utf8'),
                       host])
+        if options.verbose:
+            sys.stdout.write(u"\u2713")
     except sqlite3.IntegrityError:
+        if options.verbose:
+            sys.stdout.write(u"\u2718")
         pass
     except Exception, e:
         import pdb; pdb.set_trace()
@@ -97,9 +103,14 @@ def storeError(cur, data, error):
 
 if __name__ == "__main__":
     parser = OptionParser()
-    parser.add_option("-d", "--directory", dest="directory", help="Directory to scan", default="/media/music/")
-    parser.add_option("-D", "--database", dest="database", help="Database to store results", default="plapal.sqlite")
-    parser.add_option("-H", "--host", dest="host", help="Host name", default=socket.gethostname())
+    parser.add_option("-d", "--directory", dest="directory", 
+            help="Directory to scan", default="/media/music/")
+    parser.add_option("-D", "--database", dest="database", 
+            help="Database to store results", default="plapal.sqlite")
+    parser.add_option("-H", "--host", dest="host", 
+            help="Host name", default=socket.gethostname())
+    parser.add_option("-v", "--verbose", action="store_true", 
+            dest="verbose", help="Verbose output", default=False)
     (options, args) = parser.parse_args()
 
     
@@ -111,14 +122,13 @@ if __name__ == "__main__":
     for f in files:
         try:
             data = getData(f, options.directory)
-            storeData(cur, data, options.host)
+            storeData(cur, data, options)
         except Exception,e:
             db.commit()
-            print "Skipping..."
-            pprint(data)
-            print "\t\t%s" % e
+            print "Skipping %s" % file
+            print "\t%s" % e
             pprint(findMatch(cur, data))
             #storeError(cur, data, e)
         # pprint(data)
     db.commit()
-
+    print "Done"
